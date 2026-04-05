@@ -74,6 +74,10 @@ def _fetch_chart(
             try:
                 resp = _SESSION.get(url, params=params, timeout=12)
 
+                if resp.status_code == 404:
+                    logger.debug("Not found (404) for %s — skipping", ticker)
+                    return None  # permanent; no point retrying
+
                 if resp.status_code == 429:
                     logger.warning(
                         "Rate limited for %s (attempt %d) — sleeping 5s", ticker, attempt + 1

@@ -651,7 +651,7 @@ with st.sidebar:
     show_sat   = c3.checkbox("SAT",   value=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("↺  VERİLERİ YENİLE", use_container_width=True):
+    if st.button("↺  VERİLERİ YENİLE", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 
@@ -819,7 +819,7 @@ if not filtered_df.empty and "sector" in filtered_df.columns:
             xaxis=dict(gridcolor="#1A3350", tickfont=dict(size=10)),
             yaxis=dict(gridcolor="#1A3350", tickfont=dict(size=10)),
         )
-        st.plotly_chart(fig_sec, use_container_width=True)
+        st.plotly_chart(fig_sec, width="stretch")
 
 
 # ── Stock table ───────────────────────────────────────────────────────────────
@@ -857,7 +857,7 @@ else:
 
     st.dataframe(
         display_df,
-        use_container_width=True,
+        width="stretch",
         height=min(620, 56 + len(display_df) * 36),
         column_config={
             "Ticker":        st.column_config.TextColumn("TICKER", width="small"),
@@ -959,7 +959,7 @@ if selected_ticker:
             hist_df = fetch_price_history(selected_ticker, period="6mo")
         st.plotly_chart(
             build_price_chart(hist_df, ticker=selected_ticker, company_name=row.get("name", "")),
-            use_container_width=True,
+            width="stretch",
         )
         st.plotly_chart(
             build_52w_range_chart(
@@ -968,7 +968,7 @@ if selected_ticker:
                 high_52w=row.get("52w_high"),
                 ticker=selected_ticker,
             ),
-            use_container_width=True,
+            width="stretch",
         )
 
     with metrics_col:
@@ -1011,7 +1011,7 @@ if selected_ticker:
                 volatility = row.get("volatility_score", 50),
                 ticker     = selected_ticker,
             ),
-            use_container_width=True,
+            width="stretch",
         )
 
     # ── AI Analysis ───────────────────────────────────────────────────────────
@@ -1020,7 +1020,7 @@ if selected_ticker:
     with st.expander("  Groq · Llama 3.3 70B · Türkçe Analiz", expanded=True):
         ai_r, ai_btn = st.columns([5, 1])
         with ai_btn:
-            run_analysis = st.button("▶  ANALİZ", use_container_width=True)
+            run_analysis = st.button("▶  ANALİZ", width="stretch")
 
         state_key = f"ai_analysis_{selected_ticker}"
         if run_analysis:
