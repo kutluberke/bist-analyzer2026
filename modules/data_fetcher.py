@@ -70,6 +70,7 @@ def _fetch_chart(
     for attempt in range(2):
         for base in (_BASE_URL, _BASE_URL2):
             url = base.format(ticker=ticker)
+            logger.debug("Fetching URL: %s", url)
             try:
                 resp = _SESSION.get(url, params=params, timeout=12)
 
@@ -81,9 +82,7 @@ def _fetch_chart(
                     break  # break inner loop, let outer loop retry
 
                 if resp.status_code != 200:
-                    logger.warning(
-                        "HTTP %d from %s for %s", resp.status_code, base, ticker
-                    )
+                    logger.warning("HTTP %d for %s", resp.status_code, url)
                     continue  # try query2
 
                 data    = resp.json()
