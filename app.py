@@ -584,6 +584,9 @@ div[data-testid="stMetricDelta"] {
   text-align: center;
 }
 .trm-footer a { color: var(--text-dim); text-decoration: none; }
+
+/* Suppress Streamlit's auto-injected anchor links on headings */
+[data-testid="stHeaderActionElements"] { display: none !important; }
 </style>
 """.strip()
 
