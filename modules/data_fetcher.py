@@ -172,11 +172,13 @@ def _fetch_quote_fundamentals(ticker: str) -> dict:
         if resp.status_code != 200:
             logger.debug("quoteSummary HTTP %d for %s", resp.status_code, ticker)
             return {}
-        res = resp.json().get("quoteSummary", {}).get("result") or []
-        if not res:
+        data = resp.json()
+        result = data.get("quoteSummary", {}).get("result") or []
+        if not result:
             return {}
-        ks = res[0].get("defaultKeyStatistics", {})
-        sd = res[0].get("summaryDetail", {})
+        modules = result[0]  # result[0] is a dict of module names → data
+        ks = modules.get("defaultKeyStatistics", {})
+        sd = modules.get("summaryDetail", {})
 
         def _rf(section: dict, key: str):
             v = section.get(key, {})

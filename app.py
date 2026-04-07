@@ -691,7 +691,32 @@ def load_enriched_data(tickers: tuple[str, ...]) -> pd.DataFrame:
     return fetch_all_tickers(tickers)
 
 
-with st.spinner("Piyasa verileri yükleniyor…"):
+# Session-state flags
+if "watchlist" not in st.session_state:
+    st.session_state.watchlist = []
+
+if "data_requested" not in st.session_state:
+    st.session_state.data_requested = False
+
+# Lazy load gate — don't fetch on every startup; wait for user trigger
+if not st.session_state.data_requested:
+    st.markdown(
+        '<div style="text-align:center;padding:3rem 1rem">'
+        '<div style="font-family:var(--font-mono);font-size:1rem;color:var(--text-secondary);'
+        'margin-bottom:1.5rem;letter-spacing:0.08em">BIST · 100+ HİSSE</div>'
+        '<div style="font-family:var(--font-ui);font-size:0.85rem;color:var(--text-dim);'
+        'margin-bottom:2rem">Gerçek zamanlı piyasa verilerini yüklemek için butona tıklayın.</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    _, _mid, _ = st.columns([1, 2, 1])
+    with _mid:
+        if st.button("▶  Piyasa Verilerini Yükle", width="stretch"):
+            st.session_state.data_requested = True
+            st.rerun()
+    st.stop()
+
+with st.spinner("Piyasa verileri yükleniyor… (ilk açılışta 1-2 dk sürebilir)"):
     raw_df = load_enriched_data(tuple(TICKER_SYMBOLS))
 
 if raw_df.empty:
@@ -712,9 +737,6 @@ except Exception as _score_err:
     logger.error("Scoring failed: %s", _score_err)
     st.error(f"Skorlama hatası: {_score_err}")
     st.stop()
-
-if "watchlist" not in st.session_state:
-    st.session_state.watchlist = []
 
 filtered_df = apply_filters(
     scored_df,
