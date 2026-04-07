@@ -70,6 +70,9 @@ def _momentum_score(ticker: str, df: pd.DataFrame) -> float:
     return _percentile_score(float(ret), peers, higher_is_better=True)
 
 
+# TODO: incorporate beta (risk-adjusted return) and pb_ratio into valuation
+# scoring once data is confirmed flowing. pb_ratio < 1 or beta-normalised
+# momentum would improve signal quality.
 def _valuation_score(ticker: str, df: pd.DataFrame) -> float:
     """30-pt component: P/E vs sector median (lower P/E = better score)."""
     row = df.loc[ticker]

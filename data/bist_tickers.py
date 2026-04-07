@@ -1,8 +1,7 @@
 # BIST Ticker List — Yahoo Finance format (suffix: .IS)
 # Audited 2026-04-05: 79 symbols confirmed live on Yahoo Finance.
-# Removed 15 symbols that return 404 (delisted / not in Yahoo's BIST data):
-#   QNBFB, METUR, YMTAS, SAVKK, LCAYT, TRKCM, ANACM, DENCM,
-#   EMLAK, TOBRV, GUSGF, SELGD, IPEKE, KOZAL, KOZAA
+# Expanded 2026-04-07: +26 BIST-100 constituents added (105 total).
+# Any symbol that returns 404 is silently skipped by _fetch_chart.
 
 BIST_TICKERS: list[dict] = [
     # ── Bankacılık ───────────────────────────────────────────────────────────
@@ -25,6 +24,7 @@ BIST_TICKERS: list[dict] = [
     {"ticker": "NTHOL.IS",  "name": "Net Holding",               "sector": "Holding"},
     {"ticker": "AGHOL.IS",  "name": "AG Anadolu Grubu",          "sector": "Holding"},
     {"ticker": "OYAKC.IS",  "name": "Oyak Çimento",              "sector": "Holding"},
+    {"ticker": "ARCLK.IS",  "name": "Arçelik",                   "sector": "Holding"},
 
     # ── Enerji ───────────────────────────────────────────────────────────────
     {"ticker": "TUPRS.IS",  "name": "Tüpraş",                    "sector": "Enerji"},
@@ -34,6 +34,8 @@ BIST_TICKERS: list[dict] = [
     {"ticker": "ODAS.IS",   "name": "Odaş Elektrik",             "sector": "Enerji"},
     {"ticker": "TURSG.IS",  "name": "Turkcell Superonline",      "sector": "Enerji"},
     {"ticker": "EUPWR.IS",  "name": "Europower Enerji",          "sector": "Enerji"},
+    {"ticker": "ENJSA.IS",  "name": "Enerjisa",                  "sector": "Enerji"},
+    {"ticker": "NTGAZ.IS",  "name": "Naturelgaz",                "sector": "Enerji"},
 
     # ── Otomotiv ─────────────────────────────────────────────────────────────
     {"ticker": "FROTO.IS",  "name": "Ford Otosan",               "sector": "Otomotiv"},
@@ -41,6 +43,8 @@ BIST_TICKERS: list[dict] = [
     {"ticker": "TTRAK.IS",  "name": "Türk Traktör",              "sector": "Otomotiv"},
     {"ticker": "OTKAR.IS",  "name": "Otokar",                    "sector": "Otomotiv"},
     {"ticker": "DOAS.IS",   "name": "Doğuş Otomotiv",            "sector": "Otomotiv"},
+    {"ticker": "KARSN.IS",  "name": "Karsan Otomotiv",           "sector": "Otomotiv"},
+    {"ticker": "PARSN.IS",  "name": "Parsan",                    "sector": "Otomotiv"},
 
     # ── Savunma ──────────────────────────────────────────────────────────────
     {"ticker": "ASELS.IS",  "name": "Aselsan",                   "sector": "Savunma"},
@@ -56,12 +60,22 @@ BIST_TICKERS: list[dict] = [
     {"ticker": "CRFSA.IS",  "name": "CarrefourSA",               "sector": "Perakende"},
     {"ticker": "BIZIM.IS",  "name": "Bizim Toptan",              "sector": "Perakende"},
     {"ticker": "MAVI.IS",   "name": "Mavi Giyim",                "sector": "Perakende"},
+    {"ticker": "YATAS.IS",  "name": "Yataş",                     "sector": "Perakende"},
+    {"ticker": "KARTN.IS",  "name": "Kartonsan",                 "sector": "Perakende"},
 
     # ── Cam / Çelik ──────────────────────────────────────────────────────────
     {"ticker": "EREGL.IS",  "name": "Ereğli Demir Çelik",       "sector": "Cam/Çelik"},
     {"ticker": "KRDMD.IS",  "name": "Kardemir (D)",              "sector": "Cam/Çelik"},
     {"ticker": "ISGYO.IS",  "name": "İş GYO",                    "sector": "Cam/Çelik"},
     {"ticker": "KLMSN.IS",  "name": "Klimasan",                  "sector": "Cam/Çelik"},
+    {"ticker": "ERBOS.IS",  "name": "Erbosan",                   "sector": "Cam/Çelik"},
+
+    # ── Çimento ──────────────────────────────────────────────────────────────
+    {"ticker": "CIMSA.IS",  "name": "Çimsa Çimento",             "sector": "Çimento"},
+    {"ticker": "BUCIM.IS",  "name": "Bursa Çimento",             "sector": "Çimento"},
+    {"ticker": "KONYA.IS",  "name": "Konya Çimento",             "sector": "Çimento"},
+    {"ticker": "AFYON.IS",  "name": "Afyon Çimento",             "sector": "Çimento"},
+    {"ticker": "GOLTS.IS",  "name": "Göltaş Çimento",            "sector": "Çimento"},
 
     # ── Telekomünikasyon ─────────────────────────────────────────────────────
     {"ticker": "TCELL.IS",  "name": "Turkcell",                  "sector": "Telekomünikasyon"},
@@ -79,6 +93,8 @@ BIST_TICKERS: list[dict] = [
     {"ticker": "TRGYO.IS",  "name": "Torunlar GYO",              "sector": "İnşaat/GYO"},
     {"ticker": "HLGYO.IS",  "name": "Halk GYO",                  "sector": "İnşaat/GYO"},
     {"ticker": "EKGYO.IS",  "name": "Emlak Konut GYO",           "sector": "İnşaat/GYO"},
+    {"ticker": "SNGYO.IS",  "name": "Sinpaş GYO",                "sector": "İnşaat/GYO"},
+    {"ticker": "ZRGYO.IS",  "name": "Ziraat GYO",                "sector": "İnşaat/GYO"},
 
     # ── Sigorta / Finansal ───────────────────────────────────────────────────
     {"ticker": "ANSGR.IS",  "name": "Anadolu Sigorta",           "sector": "Sigorta"},
@@ -92,6 +108,9 @@ BIST_TICKERS: list[dict] = [
     {"ticker": "LINK.IS",   "name": "Link Bilgisayar",           "sector": "Teknoloji"},
     {"ticker": "KAREL.IS",  "name": "Karel Elektronik",          "sector": "Teknoloji"},
     {"ticker": "DGATE.IS",  "name": "Datagate Bilgisayar",       "sector": "Teknoloji"},
+    {"ticker": "KONTR.IS",  "name": "Kontrolmatik",              "sector": "Teknoloji"},
+    {"ticker": "VESBE.IS",  "name": "Vestel Beyaz Eşya",         "sector": "Teknoloji"},
+    {"ticker": "VESTL.IS",  "name": "Vestel Elektronik",         "sector": "Teknoloji"},
 
     # ── Gıda / İçecek ────────────────────────────────────────────────────────
     {"ticker": "ULKER.IS",  "name": "Ülker Bisküvi",             "sector": "Gıda"},
@@ -101,6 +120,7 @@ BIST_TICKERS: list[dict] = [
     {"ticker": "BANVT.IS",  "name": "Banvit",                    "sector": "Gıda"},
     {"ticker": "PENGD.IS",  "name": "Penguen Gıda",              "sector": "Gıda"},
     {"ticker": "PNSUT.IS",  "name": "Pınar Süt",                 "sector": "Gıda"},
+    {"ticker": "TBORG.IS",  "name": "Türk Tuborg",               "sector": "Gıda"},
 
     # ── İlaç / Sağlık ────────────────────────────────────────────────────────
     {"ticker": "ECILC.IS",  "name": "Eczacıbaşı İlaç",           "sector": "İlaç/Sağlık"},
@@ -112,9 +132,18 @@ BIST_TICKERS: list[dict] = [
     {"ticker": "AKCNS.IS",  "name": "Akçansa",                   "sector": "Kimya"},
     {"ticker": "BRKVY.IS",  "name": "Brisa",                     "sector": "Kimya"},
     {"ticker": "BRISA.IS",  "name": "Brisa Bridgestone",         "sector": "Kimya"},
+    {"ticker": "SASA.IS",   "name": "Sasa Polyester",            "sector": "Kimya"},
+    {"ticker": "SODA.IS",   "name": "Soda Sanayii",              "sector": "Kimya"},
+    {"ticker": "KORDS.IS",  "name": "Kordsa",                    "sector": "Kimya"},
+    {"ticker": "HEKTS.IS",  "name": "Hektaş",                    "sector": "Kimya"},
 
     # ── Madencilik ───────────────────────────────────────────────────────────
     {"ticker": "MAALT.IS",  "name": "Marmaris Altın",            "sector": "Madencilik"},
+
+    # ── Spor ─────────────────────────────────────────────────────────────────
+    {"ticker": "FENER.IS",  "name": "Fenerbahçe",                "sector": "Spor"},
+    {"ticker": "BJKAS.IS",  "name": "Beşiktaş",                  "sector": "Spor"},
+    {"ticker": "GSRAY.IS",  "name": "Galatasaray",               "sector": "Spor"},
 ]
 
 # Convenience: flat list of ticker symbols only

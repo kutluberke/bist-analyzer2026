@@ -42,8 +42,10 @@ _SESSION.headers.update({
     "Origin":          "https://finance.yahoo.com",
 })
 
-_BASE_URL  = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-_BASE_URL2 = "https://query2.finance.yahoo.com/v8/finance/chart/{ticker}"
+_BASE_URL        = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+_BASE_URL2       = "https://query2.finance.yahoo.com/v8/finance/chart/{ticker}"
+_QUOTE_SUMMARY   = "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
+_CRUMB_URL       = "https://query2.finance.yahoo.com/v1/test/getcrumb"
 
 _RANGE_MAP = {
     "1d": "1d", "5d": "5d", "1mo": "1mo", "3mo": "3mo",
@@ -113,6 +115,100 @@ def _fetch_chart(
     return None
 
 
+# ── Fundamental metrics (beta, P/B, dividend, EPS) ───────────────────────────
+
+def _get_crumb() -> str:
+    """
+    Obtain a Yahoo Finance API crumb by establishing a browser-like session.
+    The crumb is required by the v10/quoteSummary endpoint.
+    Returns an empty string on failure (callers must handle gracefully).
+    """
+    try:
+        _SESSION.headers["Accept"] = "text/html,application/xhtml+xml,*/*"
+        _SESSION.get("https://finance.yahoo.com/", timeout=12)
+        _SESSION.headers["Accept"] = "text/plain, */*"
+        r = _SESSION.get(_CRUMB_URL, timeout=8)
+        if r.status_code == 200:
+            return r.text.strip()
+    except Exception as exc:
+        logger.warning("Crumb acquisition failed: %s", exc)
+    finally:
+        _SESSION.headers["Accept"] = "application/json, text/plain, */*"
+    return ""
+
+
+# Session-scoped crumb; refreshed lazily on 401.
+_CRUMB: str = ""
+
+
+def _fetch_quote_fundamentals(ticker: str) -> dict:
+    """
+    Fetch beta, priceToBook, dividendYield, trailingEps, trailingPE from
+    Yahoo Finance v10/quoteSummary in a single HTTP call.
+
+    Uses a session-scoped crumb (acquired lazily on first call, refreshed on
+    401).  Returns a (possibly empty) dict — values may be None if Yahoo
+    doesn't carry the field for this ticker.  Never raises.
+    """
+    global _CRUMB
+
+    if not _CRUMB:
+        _CRUMB = _get_crumb()
+        if not _CRUMB:
+            logger.warning("No crumb — fundamental metrics will be skipped")
+            return {}
+
+    def _attempt(crumb: str) -> dict:
+        url = _QUOTE_SUMMARY.format(ticker=ticker)
+        resp = _SESSION.get(
+            url,
+            params={"modules": "defaultKeyStatistics,summaryDetail", "crumb": crumb},
+            timeout=10,
+        )
+        if resp.status_code == 401:
+            return {"_unauthorized": True}
+        if resp.status_code in (404, 422):
+            return {}
+        if resp.status_code != 200:
+            logger.debug("quoteSummary HTTP %d for %s", resp.status_code, ticker)
+            return {}
+        res = resp.json().get("quoteSummary", {}).get("result") or []
+        if not res:
+            return {}
+        ks = res[0].get("defaultKeyStatistics", {})
+        sd = res[0].get("summaryDetail", {})
+
+        def _rf(section: dict, key: str):
+            v = section.get(key, {})
+            raw = v.get("raw") if isinstance(v, dict) else v
+            try:
+                return float(raw) if raw is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        return {
+            "beta":           _rf(ks, "beta"),
+            "pb_ratio":       _rf(ks, "priceToBook"),
+            "eps":            _rf(ks, "trailingEps"),
+            "dividend_yield": _rf(sd, "dividendYield"),
+            "pe_ratio":       _rf(sd, "trailingPE"),
+        }
+
+    try:
+        result = _attempt(_CRUMB)
+        if result.pop("_unauthorized", False):
+            logger.debug("Crumb expired for %s — refreshing", ticker)
+            _CRUMB = _get_crumb()
+            if not _CRUMB:
+                return {}
+            result = _attempt(_CRUMB)
+            result.pop("_unauthorized", None)
+        return result
+    except Exception as exc:
+        logger.debug("Quote fundamentals failed for %s: %s", ticker, exc)
+        return {}
+
+
 # ── JSON → DataFrame ──────────────────────────────────────────────────────────
 
 def _chart_to_ohlcv(result: dict, ticker: str) -> Optional[pd.DataFrame]:
@@ -173,7 +269,7 @@ def _chart_to_ohlcv(result: dict, ticker: str) -> Optional[pd.DataFrame]:
 
 # ── Build metrics row ─────────────────────────────────────────────────────────
 
-def _build_row(ticker: str, result: dict) -> Optional[dict]:
+def _build_row(ticker: str, result: dict, fundamentals: dict | None = None) -> Optional[dict]:
     """
     Combine meta fields (live price, 52w hi/lo) with OHLCV-derived
     statistics (returns, volume ratio, volatility) into the metrics dict
@@ -245,12 +341,12 @@ def _build_row(ticker: str, result: dict) -> Optional[dict]:
         "volume":         cur_vol,
         "volume_ratio":   vol_ratio,
         "volatility":     volatility,
-        "pe_ratio":       _mf("trailingPE"),
+        "pe_ratio":       _mf("trailingPE") or (fundamentals or {}).get("pe_ratio"),
         "market_cap":     _mf("marketCap"),
-        "beta":           None,
-        "dividend_yield": None,
-        "eps":            None,
-        "pb_ratio":       None,
+        "beta":           (fundamentals or {}).get("beta"),
+        "dividend_yield": (fundamentals or {}).get("dividend_yield"),
+        "eps":            (fundamentals or {}).get("eps"),
+        "pb_ratio":       (fundamentals or {}).get("pb_ratio"),
     }
 
 
@@ -283,7 +379,8 @@ def fetch_all_tickers(tickers: tuple[str, ...] | None = None) -> pd.DataFrame:
             time.sleep(0.3)
             continue
 
-        row = _build_row(ticker, result)
+        fundamentals = _fetch_quote_fundamentals(ticker)
+        row = _build_row(ticker, result, fundamentals)
         if row is None:
             failed.append(ticker)
         else:
