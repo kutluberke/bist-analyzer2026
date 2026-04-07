@@ -665,7 +665,13 @@ with st.sidebar:
 
 # ── Terminal header ───────────────────────────────────────────────────────────
 
-now_str = datetime.now().strftime("%d.%m.%Y  %H:%M")
+try:
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("Europe/Istanbul"))
+except ImportError:
+    import pytz
+    now = datetime.now(pytz.timezone("Europe/Istanbul"))
+now_str = now.strftime("%d.%m.%Y  %H:%M")
 st.markdown(
     f'<div class="trm-header">'
     f'  <div class="trm-logo">'
@@ -1013,17 +1019,43 @@ if selected_ticker:
     chart_col, metrics_col = st.columns([2, 1], gap="large")
 
     with chart_col:
+        _period_options = {
+            "1 Ay": "1mo",
+            "3 Ay": "3mo",
+            "6 Ay": "6mo",
+            "1 Yıl": "1y",
+            "2 Yıl": "2y",
+            "5 Yıl": "5y",
+        }
+        _period_label = st.radio(
+            "Periyot",
+            list(_period_options.keys()),
+            index=3,
+            horizontal=True,
+            label_visibility="collapsed",
+            key=f"period_{selected_ticker}",
+        )
+        _period = _period_options[_period_label]
+
         with st.spinner("Fiyat grafiği yükleniyor…"):
-            hist_df = fetch_price_history(selected_ticker, period="6mo")
+            hist_df = fetch_price_history(selected_ticker, period=_period)
         st.plotly_chart(
             build_price_chart(hist_df, ticker=selected_ticker, company_name=row.get("name", "")),
             width="stretch",
         )
+
+        # Range bar reflects the selected period's actual high/low
+        if hist_df is not None and not hist_df.empty:
+            _period_low  = float(hist_df["Low"].min())
+            _period_high = float(hist_df["High"].max())
+        else:
+            _period_low  = row.get("52w_low")
+            _period_high = row.get("52w_high")
         st.plotly_chart(
             build_52w_range_chart(
                 current=row.get("price"),
-                low_52w=row.get("52w_low"),
-                high_52w=row.get("52w_high"),
+                low_52w=_period_low,
+                high_52w=_period_high,
                 ticker=selected_ticker,
             ),
             width="stretch",
