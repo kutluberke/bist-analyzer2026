@@ -275,12 +275,16 @@ def build_display_df(df: pd.DataFrame) -> pd.DataFrame:
     available = [c for c in cols if c in df.columns]
     display   = df[available].rename(columns=cols).copy()
 
-    # Format market cap as human-readable
+    # Format market cap as human-readable string
     if "Piyasa Değeri" in display.columns:
         display["Piyasa Değeri"] = display["Piyasa Değeri"].apply(_fmt_market_cap)
 
-    # Round numeric cols
-    for col in ["Fiyat (₺)", "F/K", "52H Getiri %", "Skor"]:
+    # Format F/K as string so None renders as "—" not "None"
+    if "F/K" in display.columns:
+        display["F/K"] = display["F/K"].apply(_fmt_pe)
+
+    # Round remaining numeric cols
+    for col in ["Fiyat (₺)", "52H Getiri %", "Skor"]:
         if col in display.columns:
             display[col] = pd.to_numeric(display[col], errors="coerce").round(2)
 
@@ -292,11 +296,21 @@ def _fmt_market_cap(val) -> str:
         return "—"
     val = float(val)
     if val >= 1e12:
-        return f"₺{val/1e12:.2f}T"
+        return f"₺{val/1e12:.1f}T"
     if val >= 1e9:
-        return f"₺{val/1e9:.2f}Mn"
+        return f"₺{val/1e9:.1f}Mlr"
     if val >= 1e6:
-        return f"₺{val/1e6:.2f}M"
+        return f"₺{val/1e6:.1f}Mn"
     return f"₺{val:,.0f}"
+
+
+def _fmt_pe(val) -> str:
+    if val is None or val == "None":
+        return "—"
+    try:
+        f = float(val)
+        return "—" if np.isnan(f) or f <= 0 else f"{f:.1f}"
+    except (TypeError, ValueError):
+        return "—"
 
 

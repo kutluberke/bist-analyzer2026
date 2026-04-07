@@ -189,11 +189,13 @@ def _fetch_quote_fundamentals(ticker: str) -> dict:
                 return None
 
         return {
-            "beta":           _rf(ks, "beta"),
-            "pb_ratio":       _rf(ks, "priceToBook"),
-            "eps":            _rf(ks, "trailingEps"),
-            "dividend_yield": _rf(sd, "dividendYield"),
-            "pe_ratio":       _rf(sd, "trailingPE"),
+            "beta":               _rf(ks, "beta"),
+            "pb_ratio":           _rf(ks, "priceToBook"),
+            "eps":                _rf(ks, "trailingEps"),
+            "shares_outstanding": _rf(ks, "sharesOutstanding"),
+            "dividend_yield":     _rf(sd, "dividendYield"),
+            "pe_ratio":           _rf(sd, "trailingPE"),
+            "market_cap":         _rf(sd, "marketCap"),
         }
 
     try:
@@ -329,6 +331,14 @@ def _build_row(ticker: str, result: dict, fundamentals: dict | None = None) -> O
         volatility = float(log_ret.iloc[-30:].std() * np.sqrt(252) * 100)
 
     local = TICKER_MAP.get(ticker, {})
+    fund  = fundamentals or {}
+
+    # Market cap: chart meta → quoteSummary summaryDetail → shares × price
+    market_cap = _mf("marketCap") or fund.get("market_cap")
+    if not market_cap:
+        shares = fund.get("shares_outstanding")
+        if shares and price:
+            market_cap = shares * price
 
     return {
         "ticker":         ticker,
@@ -343,12 +353,12 @@ def _build_row(ticker: str, result: dict, fundamentals: dict | None = None) -> O
         "volume":         cur_vol,
         "volume_ratio":   vol_ratio,
         "volatility":     volatility,
-        "pe_ratio":       _mf("trailingPE") or (fundamentals or {}).get("pe_ratio"),
-        "market_cap":     _mf("marketCap"),
-        "beta":           (fundamentals or {}).get("beta"),
-        "dividend_yield": (fundamentals or {}).get("dividend_yield"),
-        "eps":            (fundamentals or {}).get("eps"),
-        "pb_ratio":       (fundamentals or {}).get("pb_ratio"),
+        "pe_ratio":       _mf("trailingPE") or fund.get("pe_ratio"),
+        "market_cap":     market_cap,
+        "beta":           fund.get("beta"),
+        "dividend_yield": fund.get("dividend_yield"),
+        "eps":            fund.get("eps"),
+        "pb_ratio":       fund.get("pb_ratio"),
     }
 
 

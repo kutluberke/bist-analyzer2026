@@ -889,7 +889,7 @@ else:
             "Şirket":        st.column_config.TextColumn("ŞİRKET", width="medium"),
             "Sektör":        st.column_config.TextColumn("SEKTÖR", width="small"),
             "Fiyat (₺)":     st.column_config.NumberColumn("FİYAT", format="₺%.2f"),
-            "F/K":           st.column_config.NumberColumn("F/K", format="%.1f"),
+            "F/K":           st.column_config.TextColumn("F/K", width="small"),
             "Piyasa Değeri": st.column_config.TextColumn("PİY. DEĞERİ", width="medium"),
             "52H Getiri %":  st.column_config.NumberColumn("52H GETİRİ", format="%.2f%%"),
             "Skor":          st.column_config.ProgressColumn("SKOR", min_value=0, max_value=100, format="%.0f"),
