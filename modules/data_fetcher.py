@@ -406,7 +406,7 @@ def fetch_all_tickers(tickers: tuple[str, ...] | None = None) -> pd.DataFrame:
 
 # ── Public: single-ticker OHLCV for detail-view chart ────────────────────────
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_price_history(
     ticker: str,
     period: str = "6mo",

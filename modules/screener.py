@@ -186,6 +186,10 @@ def score_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         + out["volatility_score"] * WEIGHT_VOLATILITY
     ).round(1)
 
+    _min, _max = out["total_score"].min(), out["total_score"].max()
+    if _max > _min:
+        out["total_score"] = ((out["total_score"] - _min) / (_max - _min) * 100).round(1)
+
     out["signal"] = out["total_score"].apply(_score_to_signal)
     return out
 

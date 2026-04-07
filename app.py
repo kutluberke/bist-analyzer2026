@@ -713,6 +713,9 @@ except Exception as _score_err:
     st.error(f"Skorlama hatası: {_score_err}")
     st.stop()
 
+if "watchlist" not in st.session_state:
+    st.session_state.watchlist = []
+
 filtered_df = apply_filters(
     scored_df,
     sectors=selected_sectors if selected_sectors else None,
@@ -882,6 +885,30 @@ else:
     )
 
 
+# ── Watchlist panel ───────────────────────────────────────────────────────────
+
+if st.session_state.watchlist:
+    wl_tickers = [t for t in st.session_state.watchlist if t in scored_df.index]
+    if wl_tickers:
+        st.markdown('<div class="sec-label">İzleme Listem</div>', unsafe_allow_html=True)
+        wl_display = build_display_df(scored_df.loc[wl_tickers])
+        wl_display.insert(0, "Ticker", wl_tickers)
+        wl_display = wl_display.reset_index(drop=True)
+        st.dataframe(
+            wl_display,
+            width="stretch",
+            height=min(400, 56 + len(wl_display) * 36),
+            column_config={
+                "Ticker":        st.column_config.TextColumn("TICKER", width="small"),
+                "Şirket":        st.column_config.TextColumn("ŞİRKET", width="medium"),
+                "Fiyat (₺)":     st.column_config.NumberColumn("FİYAT", format="₺%.2f"),
+                "Skor":          st.column_config.ProgressColumn("SKOR", min_value=0, max_value=100, format="%.0f"),
+                "Sinyal":        st.column_config.TextColumn("SİNYAL", width="small"),
+            },
+            hide_index=True,
+        )
+
+
 # ── Detail view ───────────────────────────────────────────────────────────────
 
 st.markdown('<div class="sec-label">Hisse Detay</div>', unsafe_allow_html=True)
@@ -951,6 +978,15 @@ if selected_ticker:
         f'</div>',
         unsafe_allow_html=True,
     )
+
+    _in_wl = selected_ticker in st.session_state.watchlist
+    _wl_label = "★ Listeden Çıkar" if _in_wl else "☆ İzleme Listesine Ekle"
+    if st.button(_wl_label, key=f"wl_{selected_ticker}"):
+        if _in_wl:
+            st.session_state.watchlist.remove(selected_ticker)
+        else:
+            st.session_state.watchlist.append(selected_ticker)
+        st.rerun()
 
     chart_col, metrics_col = st.columns([2, 1], gap="large")
 
