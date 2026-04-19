@@ -37,6 +37,7 @@ from modules.screener import (
 )
 from modules.charts import build_price_chart, build_52w_range_chart, build_score_radar
 from modules.analyzer import analyze_stock
+from modules.backtest import render_backtest_tab
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -767,397 +768,399 @@ if "signal" in filtered_df.columns and wanted_signals:
     filtered_df = filtered_df[filtered_df["signal"].isin(wanted_signals)]
 
 
-# ── KPI scoreboard ────────────────────────────────────────────────────────────
+_tab_screener, _tab_backtest = st.tabs(["Tarayıcı", "Backtest"])
 
-total       = len(filtered_df)
-count_al    = int((filtered_df["signal"] == SIGNAL_AL).sum())    if "signal" in filtered_df.columns else 0
-count_bekle = int((filtered_df["signal"] == SIGNAL_BEKLE).sum()) if "signal" in filtered_df.columns else 0
-count_sat   = int((filtered_df["signal"] == SIGNAL_SAT).sum())   if "signal" in filtered_df.columns else 0
-avg_return  = filtered_df["52w_return"].dropna().mean()  if "52w_return"   in filtered_df.columns and not filtered_df.empty else None
-avg_score   = filtered_df["total_score"].dropna().mean() if "total_score"  in filtered_df.columns and not filtered_df.empty else None
+with _tab_screener:
 
-ret_color   = "green" if (avg_return or 0) >= 0 else "red"
-score_color = "accent" if (avg_score or 0) >= 65 else ("yellow" if (avg_score or 0) >= 40 else "red")
+    # ── KPI scoreboard ────────────────────────────────────────────────────────
 
-st.markdown(
-    f'<div class="sec-label">Özet</div>'
-    f'<div class="kpi-grid">'
-    f'  <div class="kpi-card accent">'
-    f'    <div class="kpi-label">Toplam Hisse</div>'
-    f'    <div class="kpi-value accent">{total}</div>'
-    f'  </div>'
-    f'  <div class="kpi-card green">'
-    f'    <div class="kpi-label">AL Sinyali</div>'
-    f'    <div class="kpi-value green">{count_al}</div>'
-    f'  </div>'
-    f'  <div class="kpi-card yellow">'
-    f'    <div class="kpi-label">BEKLE Sinyali</div>'
-    f'    <div class="kpi-value yellow">{count_bekle}</div>'
-    f'  </div>'
-    f'  <div class="kpi-card red">'
-    f'    <div class="kpi-label">SAT Sinyali</div>'
-    f'    <div class="kpi-value red">{count_sat}</div>'
-    f'  </div>'
-    f'  <div class="kpi-card">'
-    f'    <div class="kpi-label">Ort. 52H Getiri</div>'
-    f'    <div class="kpi-value {ret_color}">'
-    f'      {"—" if avg_return is None else f"{avg_return:+.1f}%"}'
-    f'    </div>'
-    f'  </div>'
-    f'  <div class="kpi-card">'
-    f'    <div class="kpi-label">Ort. Skor</div>'
-    f'    <div class="kpi-value {score_color}">'
-    f'      {"—" if avg_score is None else f"{avg_score:.1f}"}'
-    f'    </div>'
-    f'  </div>'
-    f'</div>',
-    unsafe_allow_html=True,
-)
+    total       = len(filtered_df)
+    count_al    = int((filtered_df["signal"] == SIGNAL_AL).sum())    if "signal" in filtered_df.columns else 0
+    count_bekle = int((filtered_df["signal"] == SIGNAL_BEKLE).sum()) if "signal" in filtered_df.columns else 0
+    count_sat   = int((filtered_df["signal"] == SIGNAL_SAT).sum())   if "signal" in filtered_df.columns else 0
+    avg_return  = filtered_df["52w_return"].dropna().mean()  if "52w_return"   in filtered_df.columns and not filtered_df.empty else None
+    avg_score   = filtered_df["total_score"].dropna().mean() if "total_score"  in filtered_df.columns and not filtered_df.empty else None
 
+    ret_color   = "green" if (avg_return or 0) >= 0 else "red"
+    score_color = "accent" if (avg_score or 0) >= 65 else ("yellow" if (avg_score or 0) >= 40 else "red")
 
-# ── Sector breakdown chart ────────────────────────────────────────────────────
+    st.markdown(
+        f'<div class="sec-label">Özet</div>'
+        f'<div class="kpi-grid">'
+        f'  <div class="kpi-card accent">'
+        f'    <div class="kpi-label">Toplam Hisse</div>'
+        f'    <div class="kpi-value accent">{total}</div>'
+        f'  </div>'
+        f'  <div class="kpi-card green">'
+        f'    <div class="kpi-label">AL Sinyali</div>'
+        f'    <div class="kpi-value green">{count_al}</div>'
+        f'  </div>'
+        f'  <div class="kpi-card yellow">'
+        f'    <div class="kpi-label">BEKLE Sinyali</div>'
+        f'    <div class="kpi-value yellow">{count_bekle}</div>'
+        f'  </div>'
+        f'  <div class="kpi-card red">'
+        f'    <div class="kpi-label">SAT Sinyali</div>'
+        f'    <div class="kpi-value red">{count_sat}</div>'
+        f'  </div>'
+        f'  <div class="kpi-card">'
+        f'    <div class="kpi-label">Ort. 52H Getiri</div>'
+        f'    <div class="kpi-value {ret_color}">'
+        f'      {"—" if avg_return is None else f"{avg_return:+.1f}%"}'
+        f'    </div>'
+        f'  </div>'
+        f'  <div class="kpi-card">'
+        f'    <div class="kpi-label">Ort. Skor</div>'
+        f'    <div class="kpi-value {score_color}">'
+        f'      {"—" if avg_score is None else f"{avg_score:.1f}"}'
+        f'    </div>'
+        f'  </div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
-if not filtered_df.empty and "sector" in filtered_df.columns:
-    with st.expander("  Sektör Dağılımı", expanded=False):
-        sector_counts = (
-            filtered_df.groupby("sector")["signal"]
-            .value_counts()
-            .unstack(fill_value=0)
+    # ── Sector breakdown chart ────────────────────────────────────────────────
+
+    if not filtered_df.empty and "sector" in filtered_df.columns:
+        with st.expander("  Sektör Dağılımı", expanded=False):
+            sector_counts = (
+                filtered_df.groupby("sector")["signal"]
+                .value_counts()
+                .unstack(fill_value=0)
+            )
+            for sig in [SIGNAL_AL, SIGNAL_BEKLE, SIGNAL_SAT]:
+                if sig not in sector_counts.columns:
+                    sector_counts[sig] = 0
+            sector_counts = sector_counts[[SIGNAL_AL, SIGNAL_BEKLE, SIGNAL_SAT]]
+            sector_counts.columns = ["AL", "BEKLE", "SAT"]
+
+            import plotly.graph_objects as go
+
+            fig_sec = go.Figure()
+            for lbl, color in [("AL", "#00E676"), ("BEKLE", "#FFD600"), ("SAT", "#FF4444")]:
+                fig_sec.add_trace(go.Bar(
+                    name=lbl,
+                    x=sector_counts.index.tolist(),
+                    y=sector_counts[lbl].tolist(),
+                    marker_color=color,
+                    marker_line_width=0,
+                ))
+            fig_sec.update_layout(
+                barmode="stack",
+                plot_bgcolor="#0C1B2E",
+                paper_bgcolor="#0C1B2E",
+                font=dict(family="Space Grotesk, Inter, sans-serif", color="#7A9BB8", size=11),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                            bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
+                margin=dict(l=0, r=0, t=30, b=0),
+                height=260,
+                xaxis=dict(gridcolor="#1A3350", tickfont=dict(size=10)),
+                yaxis=dict(gridcolor="#1A3350", tickfont=dict(size=10)),
+            )
+            st.plotly_chart(fig_sec, width="stretch")
+
+    # ── Stock table ───────────────────────────────────────────────────────────
+
+    st.markdown(
+        f'<div class="sec-label">Hisse Listesi — {total} sonuç</div>',
+        unsafe_allow_html=True,
+    )
+
+    if filtered_df.empty:
+        st.warning("Seçili filtrelere uyan hisse bulunamadı. Filtreleri genişletin.")
+    else:
+        s_col, _ = st.columns([3, 1])
+        SORT_OPTIONS = {
+            "Skor ↓":            ("total_score", False),
+            "52H Getiri ↓":      ("52w_return",  False),
+            "52H Getiri ↑":      ("52w_return",  True),
+            "F/K ↑":             ("pe_ratio",    True),
+            "F/K ↓":             ("pe_ratio",    False),
+            "Piyasa Değeri ↓":   ("market_cap",  False),
+            "Fiyat ↓":           ("price",       False),
+        }
+        with s_col:
+            sort_choice = st.selectbox("Sıralama", list(SORT_OPTIONS.keys()), index=0)
+
+        sort_column, sort_asc = SORT_OPTIONS[sort_choice]
+        sorted_df = (
+            filtered_df.sort_values(sort_column, ascending=sort_asc, na_position="last")
+            if sort_column in filtered_df.columns else filtered_df
         )
-        for sig in [SIGNAL_AL, SIGNAL_BEKLE, SIGNAL_SAT]:
-            if sig not in sector_counts.columns:
-                sector_counts[sig] = 0
-        sector_counts = sector_counts[[SIGNAL_AL, SIGNAL_BEKLE, SIGNAL_SAT]]
-        sector_counts.columns = ["AL", "BEKLE", "SAT"]
 
-        import plotly.graph_objects as go
+        display_df = build_display_df(sorted_df)
+        display_df.insert(0, "Ticker", sorted_df.index)
+        display_df = display_df.reset_index(drop=True)
 
-        fig_sec = go.Figure()
-        for lbl, color in [("AL", "#00E676"), ("BEKLE", "#FFD600"), ("SAT", "#FF4444")]:
-            fig_sec.add_trace(go.Bar(
-                name=lbl,
-                x=sector_counts.index.tolist(),
-                y=sector_counts[lbl].tolist(),
-                marker_color=color,
-                marker_line_width=0,
-            ))
-        fig_sec.update_layout(
-            barmode="stack",
-            plot_bgcolor="#0C1B2E",
-            paper_bgcolor="#0C1B2E",
-            font=dict(family="Space Grotesk, Inter, sans-serif", color="#7A9BB8", size=11),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                        bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
-            margin=dict(l=0, r=0, t=30, b=0),
-            height=260,
-            xaxis=dict(gridcolor="#1A3350", tickfont=dict(size=10)),
-            yaxis=dict(gridcolor="#1A3350", tickfont=dict(size=10)),
-        )
-        st.plotly_chart(fig_sec, width="stretch")
-
-
-# ── Stock table ───────────────────────────────────────────────────────────────
-
-st.markdown(
-    f'<div class="sec-label">Hisse Listesi — {total} sonuç</div>',
-    unsafe_allow_html=True,
-)
-
-if filtered_df.empty:
-    st.warning("Seçili filtrelere uyan hisse bulunamadı. Filtreleri genişletin.")
-else:
-    s_col, _ = st.columns([3, 1])
-    SORT_OPTIONS = {
-        "Skor ↓":            ("total_score", False),
-        "52H Getiri ↓":      ("52w_return",  False),
-        "52H Getiri ↑":      ("52w_return",  True),
-        "F/K ↑":             ("pe_ratio",    True),
-        "F/K ↓":             ("pe_ratio",    False),
-        "Piyasa Değeri ↓":   ("market_cap",  False),
-        "Fiyat ↓":           ("price",       False),
-    }
-    with s_col:
-        sort_choice = st.selectbox("Sıralama", list(SORT_OPTIONS.keys()), index=0)
-
-    sort_column, sort_asc = SORT_OPTIONS[sort_choice]
-    sorted_df = (
-        filtered_df.sort_values(sort_column, ascending=sort_asc, na_position="last")
-        if sort_column in filtered_df.columns else filtered_df
-    )
-
-    display_df = build_display_df(sorted_df)
-    display_df.insert(0, "Ticker", sorted_df.index)
-    display_df = display_df.reset_index(drop=True)
-
-    st.dataframe(
-        display_df,
-        width="stretch",
-        height=min(620, 56 + len(display_df) * 36),
-        column_config={
-            "Ticker":        st.column_config.TextColumn("TICKER", width="small"),
-            "Şirket":        st.column_config.TextColumn("ŞİRKET", width="medium"),
-            "Sektör":        st.column_config.TextColumn("SEKTÖR", width="small"),
-            "Fiyat (₺)":     st.column_config.NumberColumn("FİYAT", format="₺%.2f"),
-            "F/K":           st.column_config.TextColumn("F/K", width="small"),
-            "Piyasa Değeri": st.column_config.TextColumn("PİY. DEĞERİ", width="medium"),
-            "52H Getiri %":  st.column_config.NumberColumn("52H GETİRİ", format="%.2f%%"),
-            "Skor":          st.column_config.ProgressColumn("SKOR", min_value=0, max_value=100, format="%.0f"),
-            "Sinyal":        st.column_config.TextColumn("SİNYAL", width="small"),
-        },
-        hide_index=True,
-    )
-
-    csv_data = display_df.to_csv(index=False).encode("utf-8-sig")
-    st.download_button(
-        label="↓  CSV İndir",
-        data=csv_data,
-        file_name="bist_radar.csv",
-        mime="text/csv",
-    )
-
-
-# ── Watchlist panel ───────────────────────────────────────────────────────────
-
-if st.session_state.watchlist:
-    wl_tickers = [t for t in st.session_state.watchlist if t in scored_df.index]
-    if wl_tickers:
-        st.markdown('<div class="sec-label">İzleme Listem</div>', unsafe_allow_html=True)
-        wl_display = build_display_df(scored_df.loc[wl_tickers])
-        wl_display.insert(0, "Ticker", wl_tickers)
-        wl_display = wl_display.reset_index(drop=True)
         st.dataframe(
-            wl_display,
+            display_df,
             width="stretch",
-            height=min(400, 56 + len(wl_display) * 36),
+            height=min(620, 56 + len(display_df) * 36),
             column_config={
                 "Ticker":        st.column_config.TextColumn("TICKER", width="small"),
                 "Şirket":        st.column_config.TextColumn("ŞİRKET", width="medium"),
+                "Sektör":        st.column_config.TextColumn("SEKTÖR", width="small"),
                 "Fiyat (₺)":     st.column_config.NumberColumn("FİYAT", format="₺%.2f"),
+                "F/K":           st.column_config.TextColumn("F/K", width="small"),
+                "Piyasa Değeri": st.column_config.TextColumn("PİY. DEĞERİ", width="medium"),
+                "52H Getiri %":  st.column_config.NumberColumn("52H GETİRİ", format="%.2f%%"),
                 "Skor":          st.column_config.ProgressColumn("SKOR", min_value=0, max_value=100, format="%.0f"),
                 "Sinyal":        st.column_config.TextColumn("SİNYAL", width="small"),
             },
             hide_index=True,
         )
 
+        csv_data = display_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            label="↓  CSV İndir",
+            data=csv_data,
+            file_name="bist_radar.csv",
+            mime="text/csv",
+        )
 
-# ── Detail view ───────────────────────────────────────────────────────────────
+    # ── Watchlist panel ───────────────────────────────────────────────────────
 
-st.markdown('<div class="sec-label">Hisse Detay</div>', unsafe_allow_html=True)
+    if st.session_state.watchlist:
+        wl_tickers = [t for t in st.session_state.watchlist if t in scored_df.index]
+        if wl_tickers:
+            st.markdown('<div class="sec-label">İzleme Listem</div>', unsafe_allow_html=True)
+            wl_display = build_display_df(scored_df.loc[wl_tickers])
+            wl_display.insert(0, "Ticker", wl_tickers)
+            wl_display = wl_display.reset_index(drop=True)
+            st.dataframe(
+                wl_display,
+                width="stretch",
+                height=min(400, 56 + len(wl_display) * 36),
+                column_config={
+                    "Ticker":        st.column_config.TextColumn("TICKER", width="small"),
+                    "Şirket":        st.column_config.TextColumn("ŞİRKET", width="medium"),
+                    "Fiyat (₺)":     st.column_config.NumberColumn("FİYAT", format="₺%.2f"),
+                    "Skor":          st.column_config.ProgressColumn("SKOR", min_value=0, max_value=100, format="%.0f"),
+                    "Sinyal":        st.column_config.TextColumn("SİNYAL", width="small"),
+                },
+                hide_index=True,
+            )
 
-all_tickers_sorted = sorted(scored_df.index.tolist())
-ticker_labels = {
-    t: f"{t}  —  {scored_df.loc[t, 'name']}" if "name" in scored_df.columns else t
-    for t in all_tickers_sorted
-}
-default_ticker = (
-    filtered_df.index[0] if not filtered_df.empty
-    else (all_tickers_sorted[0] if all_tickers_sorted else None)
-)
-default_idx = all_tickers_sorted.index(default_ticker) if default_ticker in all_tickers_sorted else 0
+    # ── Detail view ───────────────────────────────────────────────────────────
 
-selected_ticker: str = st.selectbox(
-    "Hisse",
-    options=all_tickers_sorted,
-    index=default_idx,
-    format_func=lambda t: ticker_labels.get(t, t),
-    label_visibility="collapsed",
-)
+    st.markdown('<div class="sec-label">Hisse Detay</div>', unsafe_allow_html=True)
 
-if selected_ticker:
-    row        = scored_df.loc[selected_ticker].to_dict()
-    row["ticker"] = selected_ticker
-    signal_val = row.get("signal", "—")
-    price_val  = row.get("price")
-    prev_close = row.get("prev_close")
-    day_chg    = ((price_val - prev_close) / prev_close * 100) if price_val and prev_close and prev_close != 0 else None
-
-    price_str  = f"₺{price_val:,.2f}" if price_val else "—"
-    if day_chg is None:
-        chg_css, chg_str = "flat", "—"
-    elif day_chg >= 0:
-        chg_css, chg_str = "up",   f"▲ {day_chg:+.2f}%"
-    else:
-        chg_css, chg_str = "down", f"▼ {day_chg:.2f}%"
-
-    sig_map = {
-        SIGNAL_AL:    ('<span class="sig-badge sig-al">▲ AL</span>',    "var(--green)"),
-        SIGNAL_BEKLE: ('<span class="sig-badge sig-bekle">◆ BEKLE</span>', "var(--yellow)"),
-        SIGNAL_SAT:   ('<span class="sig-badge sig-sat">▼ SAT</span>',  "var(--red)"),
+    all_tickers_sorted = sorted(scored_df.index.tolist())
+    ticker_labels = {
+        t: f"{t}  —  {scored_df.loc[t, 'name']}" if "name" in scored_df.columns else t
+        for t in all_tickers_sorted
     }
-    sig_html, sig_border = sig_map.get(signal_val, (signal_val, "var(--border-base)"))
+    default_ticker = (
+        filtered_df.index[0] if not filtered_df.empty
+        else (all_tickers_sorted[0] if all_tickers_sorted else None)
+    )
+    default_idx = all_tickers_sorted.index(default_ticker) if default_ticker in all_tickers_sorted else 0
 
-    total_score = row.get("total_score", 0) or 0
-    score_bar_color = "#00E676" if total_score >= 65 else ("#FFD600" if total_score >= 40 else "#FF4444")
-
-    st.markdown(
-        f'<div class="det-header" style="border-left-color:{sig_border}">'
-        f'  <div>'
-        f'    <div class="det-name">{row.get("name", selected_ticker)}</div>'
-        f'    <div class="det-meta">'
-        f'      <span style="color:var(--accent);font-weight:600">{selected_ticker}</span>'
-        f'      &nbsp;·&nbsp; {row.get("sector","")}'
-        f'      &nbsp;·&nbsp; {sig_html}'
-        f'      &nbsp;·&nbsp; '
-        f'      <span style="color:var(--text-dim)">SKOR:</span> '
-        f'      <span style="color:{score_bar_color};font-weight:700">{total_score:.0f}</span>'
-        f'    </div>'
-        f'  </div>'
-        f'  <div class="det-price">'
-        f'    <div class="det-price-val">{price_str}</div>'
-        f'    <div class="det-price-chg {chg_css}">{chg_str}</div>'
-        f'  </div>'
-        f'</div>',
-        unsafe_allow_html=True,
+    selected_ticker: str = st.selectbox(
+        "Hisse",
+        options=all_tickers_sorted,
+        index=default_idx,
+        format_func=lambda t: ticker_labels.get(t, t),
+        label_visibility="collapsed",
     )
 
-    _in_wl = selected_ticker in st.session_state.watchlist
-    _wl_label = "★ Listeden Çıkar" if _in_wl else "☆ İzleme Listesine Ekle"
-    if st.button(_wl_label, key=f"wl_{selected_ticker}"):
-        if _in_wl:
-            st.session_state.watchlist.remove(selected_ticker)
+    if selected_ticker:
+        row        = scored_df.loc[selected_ticker].to_dict()
+        row["ticker"] = selected_ticker
+        signal_val = row.get("signal", "—")
+        price_val  = row.get("price")
+        prev_close = row.get("prev_close")
+        day_chg    = ((price_val - prev_close) / prev_close * 100) if price_val and prev_close and prev_close != 0 else None
+
+        price_str  = f"₺{price_val:,.2f}" if price_val else "—"
+        if day_chg is None:
+            chg_css, chg_str = "flat", "—"
+        elif day_chg >= 0:
+            chg_css, chg_str = "up",   f"▲ {day_chg:+.2f}%"
         else:
-            st.session_state.watchlist.append(selected_ticker)
-        st.rerun()
+            chg_css, chg_str = "down", f"▼ {day_chg:.2f}%"
 
-    chart_col, metrics_col = st.columns([2, 1], gap="large")
-
-    with chart_col:
-        _period_options = {
-            "1 Ay": "1mo",
-            "3 Ay": "3mo",
-            "6 Ay": "6mo",
-            "1 Yıl": "1y",
-            "2 Yıl": "2y",
-            "5 Yıl": "5y",
+        sig_map = {
+            SIGNAL_AL:    ('<span class="sig-badge sig-al">▲ AL</span>',    "var(--green)"),
+            SIGNAL_BEKLE: ('<span class="sig-badge sig-bekle">◆ BEKLE</span>', "var(--yellow)"),
+            SIGNAL_SAT:   ('<span class="sig-badge sig-sat">▼ SAT</span>',  "var(--red)"),
         }
-        _period_label = st.radio(
-            "Periyot",
-            list(_period_options.keys()),
-            index=3,
-            horizontal=True,
-            label_visibility="collapsed",
-            key=f"period_{selected_ticker}",
-        )
-        _period = _period_options[_period_label]
+        sig_html, sig_border = sig_map.get(signal_val, (signal_val, "var(--border-base)"))
 
-        with st.spinner("Fiyat grafiği yükleniyor…"):
-            hist_df = fetch_price_history(selected_ticker, period=_period)
-        st.plotly_chart(
-            build_price_chart(hist_df, ticker=selected_ticker, company_name=row.get("name", "")),
-            width="stretch",
-        )
+        total_score = row.get("total_score", 0) or 0
+        score_bar_color = "#00E676" if total_score >= 65 else ("#FFD600" if total_score >= 40 else "#FF4444")
 
-        # Range bar reflects the selected period's actual high/low
-        if hist_df is not None and not hist_df.empty:
-            _period_low  = float(hist_df["Low"].min())
-            _period_high = float(hist_df["High"].max())
-        else:
-            _period_low  = row.get("52w_low")
-            _period_high = row.get("52w_high")
-        st.plotly_chart(
-            build_52w_range_chart(
-                current=row.get("price"),
-                low_52w=_period_low,
-                high_52w=_period_high,
-                ticker=selected_ticker,
-            ),
-            width="stretch",
+        st.markdown(
+            f'<div class="det-header" style="border-left-color:{sig_border}">'
+            f'  <div>'
+            f'    <div class="det-name">{row.get("name", selected_ticker)}</div>'
+            f'    <div class="det-meta">'
+            f'      <span style="color:var(--accent);font-weight:600">{selected_ticker}</span>'
+            f'      &nbsp;·&nbsp; {row.get("sector","")}'
+            f'      &nbsp;·&nbsp; {sig_html}'
+            f'      &nbsp;·&nbsp; '
+            f'      <span style="color:var(--text-dim)">SKOR:</span> '
+            f'      <span style="color:{score_bar_color};font-weight:700">{total_score:.0f}</span>'
+            f'    </div>'
+            f'  </div>'
+            f'  <div class="det-price">'
+            f'    <div class="det-price-val">{price_str}</div>'
+            f'    <div class="det-price-chg {chg_css}">{chg_str}</div>'
+            f'  </div>'
+            f'</div>',
+            unsafe_allow_html=True,
         )
 
-    with metrics_col:
-        def _fv(val, fmt=".2f", prefix="", suffix="", fallback="—"):
-            import math
-            if val is None or (isinstance(val, float) and math.isnan(val)):
-                return fallback
-            return f"{prefix}{float(val):{fmt}}{suffix}"
+        _in_wl = selected_ticker in st.session_state.watchlist
+        _wl_label = "★ Listeden Çıkar" if _in_wl else "☆ İzleme Listesine Ekle"
+        if st.button(_wl_label, key=f"wl_{selected_ticker}"):
+            if _in_wl:
+                st.session_state.watchlist.remove(selected_ticker)
+            else:
+                st.session_state.watchlist.append(selected_ticker)
+            st.rerun()
 
-        w52_ret   = row.get("52w_return")
-        ret_class = "green" if (w52_ret or 0) > 0 else "red"
+        chart_col, metrics_col = st.columns([2, 1], gap="large")
 
-        dy = row.get("dividend_yield")
-        dy_str = _fv(dy * 100 if dy else None, ".2f", suffix="%")
+        with chart_col:
+            _period_options = {
+                "1 Ay": "1mo",
+                "3 Ay": "3mo",
+                "6 Ay": "6mo",
+                "1 Yıl": "1y",
+                "2 Yıl": "2y",
+                "5 Yıl": "5y",
+            }
+            _period_label = st.radio(
+                "Periyot",
+                list(_period_options.keys()),
+                index=3,
+                horizontal=True,
+                label_visibility="collapsed",
+                key=f"period_{selected_ticker}",
+            )
+            _period = _period_options[_period_label]
 
-        cards = [
-            ("F/K ORANI",      _fv(row.get("pe_ratio"),    ".1f"),          ""),
-            ("F/DD ORANI",     _fv(row.get("pb_ratio"),    ".2f"),          ""),
-            ("BETA",           _fv(row.get("beta"),        ".2f"),          ""),
-            ("52H GETİRİ",     _fv(w52_ret, ".1f", suffix="%"),             ret_class),
-            ("TEMETTÜ",        dy_str,                                       ""),
-            ("ORT. HACİM",     _fv(row.get("avg_volume"),  ",.0f", suffix=" lot"), ""),
-            ("HACİM TRENDİ",   _fv(row.get("volume_ratio"), ".2f", suffix="x"),    "accent"),
-            ("YIL. VOL.",      _fv(row.get("volatility"),  ".1f", suffix="%"),     ""),
-        ]
-        cards_html = "".join(
-            f'<div class="mc-card">'
-            f'<div class="mc-label">{lbl}</div>'
-            f'<div class="mc-value {cls}">{val}</div>'
-            f'</div>'
-            for lbl, val, cls in cards
-        )
-        st.markdown(f'<div class="mc-grid">{cards_html}</div>', unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.plotly_chart(
-            build_score_radar(
-                momentum   = row.get("momentum_score",   50),
-                valuation  = row.get("valuation_score",  50),
-                volume     = row.get("volume_score",     50),
-                volatility = row.get("volatility_score", 50),
-                ticker     = selected_ticker,
-            ),
-            width="stretch",
-        )
+            with st.spinner("Fiyat grafiği yükleniyor…"):
+                hist_df = fetch_price_history(selected_ticker, period=_period)
+            st.plotly_chart(
+                build_price_chart(hist_df, ticker=selected_ticker, company_name=row.get("name", "")),
+                width="stretch",
+            )
 
-    # ── AI Analysis ───────────────────────────────────────────────────────────
-    st.markdown('<div class="sec-label" style="margin-top:1rem">Yapay Zeka Analizi</div>', unsafe_allow_html=True)
+            if hist_df is not None and not hist_df.empty:
+                _period_low  = float(hist_df["Low"].min())
+                _period_high = float(hist_df["High"].max())
+            else:
+                _period_low  = row.get("52w_low")
+                _period_high = row.get("52w_high")
+            st.plotly_chart(
+                build_52w_range_chart(
+                    current=row.get("price"),
+                    low_52w=_period_low,
+                    high_52w=_period_high,
+                    ticker=selected_ticker,
+                ),
+                width="stretch",
+            )
 
-    with st.expander("  Groq · Llama 3.3 70B · Türkçe Analiz", expanded=True):
-        ai_r, ai_btn = st.columns([5, 1])
-        with ai_btn:
-            run_analysis = st.button("▶  ANALİZ", width="stretch")
+        with metrics_col:
+            def _fv(val, fmt=".2f", prefix="", suffix="", fallback="—"):
+                import math
+                if val is None or (isinstance(val, float) and math.isnan(val)):
+                    return fallback
+                return f"{prefix}{float(val):{fmt}}{suffix}"
 
-        state_key = f"ai_analysis_{selected_ticker}"
-        if run_analysis:
-            st.session_state.pop(state_key, None)
+            w52_ret   = row.get("52w_return")
+            ret_class = "green" if (w52_ret or 0) > 0 else "red"
 
-        if state_key not in st.session_state:
+            dy = row.get("dividend_yield")
+            dy_str = _fv(dy * 100 if dy else None, ".2f", suffix="%")
+
+            cards = [
+                ("F/K ORANI",      _fv(row.get("pe_ratio"),    ".1f"),          ""),
+                ("F/DD ORANI",     _fv(row.get("pb_ratio"),    ".2f"),          ""),
+                ("BETA",           _fv(row.get("beta"),        ".2f"),          ""),
+                ("52H GETİRİ",     _fv(w52_ret, ".1f", suffix="%"),             ret_class),
+                ("TEMETTÜ",        dy_str,                                       ""),
+                ("ORT. HACİM",     _fv(row.get("avg_volume"),  ",.0f", suffix=" lot"), ""),
+                ("HACİM TRENDİ",   _fv(row.get("volume_ratio"), ".2f", suffix="x"),    "accent"),
+                ("YIL. VOL.",      _fv(row.get("volatility"),  ".1f", suffix="%"),     ""),
+            ]
+            cards_html = "".join(
+                f'<div class="mc-card">'
+                f'<div class="mc-label">{lbl}</div>'
+                f'<div class="mc-value {cls}">{val}</div>'
+                f'</div>'
+                for lbl, val, cls in cards
+            )
+            st.markdown(f'<div class="mc-grid">{cards_html}</div>', unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.plotly_chart(
+                build_score_radar(
+                    momentum   = row.get("momentum_score",   50),
+                    valuation  = row.get("valuation_score",  50),
+                    volume     = row.get("volume_score",     50),
+                    volatility = row.get("volatility_score", 50),
+                    ticker     = selected_ticker,
+                ),
+                width="stretch",
+            )
+
+        # ── AI Analysis ───────────────────────────────────────────────────────
+        st.markdown('<div class="sec-label" style="margin-top:1rem">Yapay Zeka Analizi</div>', unsafe_allow_html=True)
+
+        with st.expander("  Groq · Llama 3.3 70B · Türkçe Analiz", expanded=True):
+            ai_r, ai_btn = st.columns([5, 1])
+            with ai_btn:
+                run_analysis = st.button("▶  ANALİZ", width="stretch")
+
+            state_key = f"ai_analysis_{selected_ticker}"
             if run_analysis:
-                with st.spinner("Yapay zeka analiz ediyor… (5-15 sn)"):
-                    result = analyze_stock(row)
-                st.session_state[state_key] = result
-            else:
-                st.markdown(
-                    '<div style="font-family:var(--font-mono);font-size:0.8rem;'
-                    'color:var(--text-dim);padding:0.5rem 0">'
-                    '▶  ANALİZ butonuna basarak Groq AI analizini başlatın.</div>',
-                    unsafe_allow_html=True,
-                )
+                st.session_state.pop(state_key, None)
 
-        if state_key in st.session_state:
-            result = st.session_state[state_key]
-            if result.get("error") and result["error"] not in ("parse_failed",):
-                err = result["error"]
-                st.warning(
-                    "GROQ_API_KEY ayarlanmamış." if err == "no_api_key"
-                    else f"Analiz alınamadı: `{err}`",
-                    icon="⚠",
-                )
-            else:
-                for section, css, title in [
-                    ("guclu_yonler", "",      "💪  GÜÇLÜ YÖNLER"),
-                    ("riskler",      "risk",  "⚠  RİSKLER"),
-                    ("oneri",        "oneri", "◆  ÖNERİ"),
-                ]:
-                    text = result.get(section, "").strip()
-                    if text:
-                        st.markdown(
-                            f'<div class="ai-card {css}">'
-                            f'<div class="ai-card-title">{title}</div>'
-                            f'{text}</div>',
-                            unsafe_allow_html=True,
-                        )
-                if result.get("error") == "parse_failed" and result.get("raw"):
-                    with st.expander("Ham model çıktısı"):
-                        st.text(result["raw"])
+            if state_key not in st.session_state:
+                if run_analysis:
+                    with st.spinner("Yapay zeka analiz ediyor… (5-15 sn)"):
+                        result = analyze_stock(row)
+                    st.session_state[state_key] = result
+                else:
+                    st.markdown(
+                        '<div style="font-family:var(--font-mono);font-size:0.8rem;'
+                        'color:var(--text-dim);padding:0.5rem 0">'
+                        '▶  ANALİZ butonuna basarak Groq AI analizini başlatın.</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            if state_key in st.session_state:
+                result = st.session_state[state_key]
+                if result.get("error") and result["error"] not in ("parse_failed",):
+                    err = result["error"]
+                    st.warning(
+                        "GROQ_API_KEY ayarlanmamış." if err == "no_api_key"
+                        else f"Analiz alınamadı: `{err}`",
+                        icon="⚠",
+                    )
+                else:
+                    for section, css, title in [
+                        ("guclu_yonler", "",      "💪  GÜÇLÜ YÖNLER"),
+                        ("riskler",      "risk",  "⚠  RİSKLER"),
+                        ("oneri",        "oneri", "◆  ÖNERİ"),
+                    ]:
+                        text = result.get(section, "").strip()
+                        if text:
+                            st.markdown(
+                                f'<div class="ai-card {css}">'
+                                f'<div class="ai-card-title">{title}</div>'
+                                f'{text}</div>',
+                                unsafe_allow_html=True,
+                            )
+                    if result.get("error") == "parse_failed" and result.get("raw"):
+                        with st.expander("Ham model çıktısı"):
+                            st.text(result["raw"])
+
+with _tab_backtest:
+    render_backtest_tab(all_tickers_sorted, default_ticker=selected_ticker)
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
