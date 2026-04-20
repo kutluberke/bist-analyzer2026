@@ -35,8 +35,8 @@ from modules.screener import (
     SIGNAL_BEKLE,
     SIGNAL_SAT,
 )
-from modules.charts import build_price_chart, build_52w_range_chart, build_score_radar
-from modules.analyzer import analyze_stock
+from modules.charts import build_price_chart, build_score_radar
+from modules.analyzer import analyze_stock, analyze_short_term, analyze_long_term
 from modules.backtest import render_backtest_tab
 
 logging.basicConfig(level=logging.WARNING)
@@ -862,6 +862,7 @@ with _tab_screener:
     # ── Stock table ───────────────────────────────────────────────────────────
 
     st.markdown(
+        f'<a id="hisse-listesi" style="display:none"></a>'
         f'<div class="sec-label">Hisse Listesi — {total} sonuç</div>',
         unsafe_allow_html=True,
     )
@@ -1048,44 +1049,26 @@ with _tab_screener:
                 width="stretch",
             )
 
-            if hist_df is not None and not hist_df.empty:
-                _period_low  = float(hist_df["Low"].min())
-                _period_high = float(hist_df["High"].max())
-            else:
-                _period_low  = row.get("52w_low")
-                _period_high = row.get("52w_high")
-            st.plotly_chart(
-                build_52w_range_chart(
-                    current=row.get("price"),
-                    low_52w=_period_low,
-                    high_52w=_period_high,
-                    ticker=selected_ticker,
-                ),
-                width="stretch",
-            )
 
         with metrics_col:
+            import math as _math
+
             def _fv(val, fmt=".2f", prefix="", suffix="", fallback="—"):
-                import math
-                if val is None or (isinstance(val, float) and math.isnan(val)):
+                if val is None or (isinstance(val, float) and _math.isnan(val)):
                     return fallback
                 return f"{prefix}{float(val):{fmt}}{suffix}"
-
-            w52_ret   = row.get("52w_return")
-            ret_class = "green" if (w52_ret or 0) > 0 else "red"
 
             dy = row.get("dividend_yield")
             dy_str = _fv(dy * 100 if dy else None, ".2f", suffix="%")
 
             cards = [
-                ("F/K ORANI",      _fv(row.get("pe_ratio"),    ".1f"),          ""),
-                ("F/DD ORANI",     _fv(row.get("pb_ratio"),    ".2f"),          ""),
-                ("BETA",           _fv(row.get("beta"),        ".2f"),          ""),
-                ("52H GETİRİ",     _fv(w52_ret, ".1f", suffix="%"),             ret_class),
-                ("TEMETTÜ",        dy_str,                                       ""),
-                ("ORT. HACİM",     _fv(row.get("avg_volume"),  ",.0f", suffix=" lot"), ""),
-                ("HACİM TRENDİ",   _fv(row.get("volume_ratio"), ".2f", suffix="x"),    "accent"),
-                ("YIL. VOL.",      _fv(row.get("volatility"),  ".1f", suffix="%"),     ""),
+                ("F/K ORANI",    _fv(row.get("pe_ratio"),    ".1f"),               ""),
+                ("F/DD ORANI",   _fv(row.get("pb_ratio"),    ".2f"),               ""),
+                ("BETA",         _fv(row.get("beta"),        ".2f"),               ""),
+                ("TEMETTÜ",      dy_str,                                            ""),
+                ("ORT. HACİM",   _fv(row.get("avg_volume"),  ",.0f", suffix=" lot"), ""),
+                ("HACİM TRENDİ", _fv(row.get("volume_ratio"), ".2f", suffix="x"),  "accent"),
+                ("YIL. VOL.",    _fv(row.get("volatility"),  ".1f", suffix="%"),   ""),
             ]
             cards_html = "".join(
                 f'<div class="mc-card">'
@@ -1107,57 +1090,142 @@ with _tab_screener:
                 width="stretch",
             )
 
+            # ── Fiyat Performansı ─────────────────────────────────────────────
+            st.markdown('<div class="sec-label" style="margin-top:0.5rem">Fiyat Performansı</div>', unsafe_allow_html=True)
+
+            _PERF_MAP = {"1H": "1mo", "3H": "3mo", "6H": "6mo", "1Y": "1y"}
+            _perf_label = st.radio(
+                "Performans Periyodu",
+                list(_PERF_MAP.keys()),
+                index=3,
+                horizontal=True,
+                label_visibility="collapsed",
+                key=f"perf_period_{selected_ticker}",
+            )
+            _perf_period = _PERF_MAP[_perf_label]
+
+            with st.spinner("Yükleniyor…"):
+                _perf_df = fetch_price_history(selected_ticker, period=_perf_period)
+
+            if _perf_df is not None and not _perf_df.empty:
+                _p_close  = _perf_df["Close"].dropna()
+                _p_chg    = (_p_close.iloc[-1] - _p_close.iloc[0]) / _p_close.iloc[0] * 100
+                _p_min    = float(_perf_df["Low"].min())
+                _p_max    = float(_perf_df["High"].max())
+                _chg_cls  = "green" if _p_chg >= 0 else "red"
+                _chg_sign = "+" if _p_chg >= 0 else ""
+                st.markdown(
+                    f'<div class="mc-grid">'
+                    f'  <div class="mc-card" style="grid-column:span 2">'
+                    f'    <div class="mc-label">% Değişim ({_perf_label})</div>'
+                    f'    <div class="mc-value {_chg_cls}">{_chg_sign}{_p_chg:.2f}%</div>'
+                    f'  </div>'
+                    f'  <div class="mc-card">'
+                    f'    <div class="mc-label">Periyod Min</div>'
+                    f'    <div class="mc-value">₺{_p_min:,.2f}</div>'
+                    f'  </div>'
+                    f'  <div class="mc-card">'
+                    f'    <div class="mc-label">Periyod Max</div>'
+                    f'    <div class="mc-value">₺{_p_max:,.2f}</div>'
+                    f'  </div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption("Performans verisi alınamadı.")
+
         # ── AI Analysis ───────────────────────────────────────────────────────
-        st.markdown('<div class="sec-label" style="margin-top:1rem">Yapay Zeka Analizi</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="sec-label" style="margin-top:1rem">Yapay Zeka Analizi · Groq / Llama 3.3 70B</div>',
+            unsafe_allow_html=True,
+        )
 
-        with st.expander("  Groq · Llama 3.3 70B · Türkçe Analiz", expanded=True):
-            ai_r, ai_btn = st.columns([5, 1])
-            with ai_btn:
-                run_analysis = st.button("▶  ANALİZ", width="stretch")
+        # İki buton yan yana
+        _ai_c1, _ai_c2, _ai_c3 = st.columns([2, 2, 3])
+        with _ai_c1:
+            run_short = st.button(
+                "⚡ Kısa Dönem", key=f"btn_short_{selected_ticker}", width="stretch"
+            )
+        with _ai_c2:
+            run_long = st.button(
+                "📈 Uzun Dönem", key=f"btn_long_{selected_ticker}", width="stretch"
+            )
 
-            state_key = f"ai_analysis_{selected_ticker}"
-            if run_analysis:
-                st.session_state.pop(state_key, None)
+        _short_key = f"ai_short_{selected_ticker}"
+        _long_key  = f"ai_long_{selected_ticker}"
 
-            if state_key not in st.session_state:
-                if run_analysis:
-                    with st.spinner("Yapay zeka analiz ediyor… (5-15 sn)"):
-                        result = analyze_stock(row)
-                    st.session_state[state_key] = result
-                else:
+        # Yeni analiz isteklerinde önbelleği temizle
+        if run_short:
+            st.session_state.pop(_short_key, None)
+        if run_long:
+            st.session_state.pop(_long_key, None)
+
+        # Analizleri çalıştır
+        if run_short:
+            with st.spinner("Kısa dönem analiz yapılıyor… (5-15 sn)"):
+                st.session_state[_short_key] = analyze_short_term(row)
+        if run_long:
+            with st.spinner("Uzun dönem analiz yapılıyor… (5-15 sn)"):
+                st.session_state[_long_key] = analyze_long_term(row)
+
+        # Hiçbir analiz henüz yapılmadıysa yönlendirme mesajı
+        if _short_key not in st.session_state and _long_key not in st.session_state:
+            st.markdown(
+                '<div style="font-family:var(--font-mono);font-size:0.8rem;'
+                'color:var(--text-dim);padding:0.5rem 0">'
+                '⚡ Kısa Dönem veya 📈 Uzun Dönem butonuna basarak analizi başlatın. '
+                'Her iki analiz aynı anda görüntülenebilir.</div>',
+                unsafe_allow_html=True,
+            )
+
+        def _render_ai_result(result: dict) -> None:
+            """Tek bir analiz sonucunu (güçlü yönler / riskler / öneri) render eder."""
+            if result.get("error") and result["error"] not in ("parse_failed",):
+                err = result["error"]
+                st.warning(
+                    "GROQ_API_KEY ayarlanmamış." if err == "no_api_key"
+                    else f"Analiz alınamadı: `{err}`",
+                    icon="⚠",
+                )
+                return
+            for section, css, title in [
+                ("guclu_yonler", "",      "💪  GÜÇLÜ YÖNLER"),
+                ("riskler",      "risk",  "⚠  RİSKLER"),
+                ("oneri",        "oneri", "◆  ÖNERİ"),
+            ]:
+                text = result.get(section, "").strip()
+                if text:
                     st.markdown(
-                        '<div style="font-family:var(--font-mono);font-size:0.8rem;'
-                        'color:var(--text-dim);padding:0.5rem 0">'
-                        '▶  ANALİZ butonuna basarak Groq AI analizini başlatın.</div>',
+                        f'<div class="ai-card {css}">'
+                        f'<div class="ai-card-title">{title}</div>'
+                        f'{text}</div>',
                         unsafe_allow_html=True,
                     )
+            if result.get("error") == "parse_failed" and result.get("raw"):
+                with st.expander("Ham model çıktısı"):
+                    st.text(result["raw"])
 
-            if state_key in st.session_state:
-                result = st.session_state[state_key]
-                if result.get("error") and result["error"] not in ("parse_failed",):
-                    err = result["error"]
-                    st.warning(
-                        "GROQ_API_KEY ayarlanmamış." if err == "no_api_key"
-                        else f"Analiz alınamadı: `{err}`",
-                        icon="⚠",
-                    )
-                else:
-                    for section, css, title in [
-                        ("guclu_yonler", "",      "💪  GÜÇLÜ YÖNLER"),
-                        ("riskler",      "risk",  "⚠  RİSKLER"),
-                        ("oneri",        "oneri", "◆  ÖNERİ"),
-                    ]:
-                        text = result.get(section, "").strip()
-                        if text:
-                            st.markdown(
-                                f'<div class="ai-card {css}">'
-                                f'<div class="ai-card-title">{title}</div>'
-                                f'{text}</div>',
-                                unsafe_allow_html=True,
-                            )
-                    if result.get("error") == "parse_failed" and result.get("raw"):
-                        with st.expander("Ham model çıktısı"):
-                            st.text(result["raw"])
+        # Kısa dönem sonucu
+        if _short_key in st.session_state:
+            with st.expander("⚡ Kısa Dönem Analizi — 1-4 Hafta Perspektifi", expanded=True):
+                st.markdown(
+                    '<div style="font-family:var(--font-mono);font-size:0.7rem;'
+                    'color:var(--text-dim);margin-bottom:0.75rem;letter-spacing:0.05em">'
+                    'Odak: Momentum · Hacim Trendi · SMA20 Pozisyonu · Kısa Vadeli Volatilite</div>',
+                    unsafe_allow_html=True,
+                )
+                _render_ai_result(st.session_state[_short_key])
+
+        # Uzun dönem sonucu
+        if _long_key in st.session_state:
+            with st.expander("📈 Uzun Dönem Analizi — 6-12 Ay Perspektifi", expanded=True):
+                st.markdown(
+                    '<div style="font-family:var(--font-mono);font-size:0.7rem;'
+                    'color:var(--text-dim);margin-bottom:0.75rem;letter-spacing:0.05em">'
+                    'Odak: F/K · F/DD · Temettü · Beta · Sektör Pozisyonu · Piyasa Değeri</div>',
+                    unsafe_allow_html=True,
+                )
+                _render_ai_result(st.session_state[_long_key])
 
 with _tab_backtest:
     render_backtest_tab(all_tickers_sorted, default_ticker=selected_ticker)
