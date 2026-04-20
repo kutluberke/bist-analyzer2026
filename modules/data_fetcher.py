@@ -117,23 +117,39 @@ def _fetch_chart(
 
 # ── Fundamental metrics (beta, P/B, dividend, EPS) ───────────────────────────
 
+_CRUMB_RETRIES = 3
+_CRUMB_RETRY_DELAY = 2  # seconds
+
+
 def _get_crumb() -> str:
     """
     Obtain a Yahoo Finance API crumb by establishing a browser-like session.
     The crumb is required by the v10/quoteSummary endpoint.
-    Returns an empty string on failure (callers must handle gracefully).
+
+    Retries up to _CRUMB_RETRIES times with _CRUMB_RETRY_DELAY seconds between
+    attempts.  Returns an empty string on total failure.
     """
-    try:
-        _SESSION.headers["Accept"] = "text/html,application/xhtml+xml,*/*"
-        _SESSION.get("https://finance.yahoo.com/", timeout=12)
-        _SESSION.headers["Accept"] = "text/plain, */*"
-        r = _SESSION.get(_CRUMB_URL, timeout=8)
-        if r.status_code == 200:
-            return r.text.strip()
-    except Exception as exc:
-        logger.warning("Crumb acquisition failed: %s", exc)
-    finally:
-        _SESSION.headers["Accept"] = "application/json, text/plain, */*"
+    for attempt in range(1, _CRUMB_RETRIES + 1):
+        try:
+            _SESSION.headers["Accept"] = "text/html,application/xhtml+xml,*/*"
+            _SESSION.get("https://finance.yahoo.com/", timeout=12)
+            _SESSION.headers["Accept"] = "text/plain, */*"
+            r = _SESSION.get(_CRUMB_URL, timeout=8)
+            if r.status_code == 200 and r.text.strip():
+                logger.debug("Crumb acquired on attempt %d", attempt)
+                return r.text.strip()
+            logger.debug(
+                "Crumb endpoint returned HTTP %d on attempt %d", r.status_code, attempt
+            )
+        except Exception as exc:
+            logger.debug("Crumb attempt %d failed: %s", attempt, exc)
+        finally:
+            _SESSION.headers["Accept"] = "application/json, text/plain, */*"
+
+        if attempt < _CRUMB_RETRIES:
+            time.sleep(_CRUMB_RETRY_DELAY)
+
+    logger.debug("Crumb unavailable after %d attempts — will use yfinance fallback", _CRUMB_RETRIES)
     return ""
 
 
@@ -141,24 +157,83 @@ def _get_crumb() -> str:
 _CRUMB: str = ""
 
 
+def _fetch_fundamentals_yfinance(ticker: str) -> dict:
+    """
+    Fallback fundamental data source via the yfinance library.
+
+    Called when the Yahoo Finance crumb / quoteSummary endpoint is
+    unavailable.  Fetches trailingPE, priceToBook, beta, dividendYield,
+    trailingEps, sharesOutstanding and marketCap from Ticker.info.
+
+    Returns a (possibly partial) dict; missing fields are None.
+    Never raises.
+    """
+    try:
+        import yfinance as yf  # lazy import — not required for OHLCV path
+
+        info = yf.Ticker(ticker).info
+        if not info:
+            logger.debug("yfinance returned empty info for %s", ticker)
+            return {}
+
+        def _sf(key: str) -> Optional[float]:
+            v = info.get(key)
+            try:
+                return float(v) if v is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        result = {
+            "beta":               _sf("beta"),
+            "pb_ratio":           _sf("priceToBook"),
+            "eps":                _sf("trailingEps"),
+            "shares_outstanding": _sf("sharesOutstanding"),
+            "dividend_yield":     _sf("dividendYield"),
+            "pe_ratio":           _sf("trailingPE"),
+            "market_cap":         _sf("marketCap"),
+        }
+        # Only log if we got at least something useful
+        got = [k for k, v in result.items() if v is not None]
+        if got:
+            logger.debug("yfinance fallback OK for %s: %s", ticker, got)
+        else:
+            logger.debug("yfinance fallback returned no data for %s", ticker)
+        return result
+
+    except ImportError:
+        logger.debug("yfinance not installed — fundamental fallback unavailable")
+        return {}
+    except Exception as exc:
+        logger.debug("yfinance fallback failed for %s: %s", ticker, exc)
+        return {}
+
+
 def _fetch_quote_fundamentals(ticker: str) -> dict:
     """
     Fetch beta, priceToBook, dividendYield, trailingEps, trailingPE from
     Yahoo Finance v10/quoteSummary in a single HTTP call.
 
-    Uses a session-scoped crumb (acquired lazily on first call, refreshed on
-    401).  Returns a (possibly empty) dict — values may be None if Yahoo
-    doesn't carry the field for this ticker.  Never raises.
+    Strategy
+    --------
+    1. Acquire (or reuse) a session-scoped crumb — retried up to 3× internally.
+    2. Call quoteSummary; refresh crumb on 401 and retry once.
+    3. If the crumb is permanently unavailable, fall back to yfinance.info.
+    4. If both sources fail, return {} so callers show "—" in the UI.
+
+    All failures are logged at DEBUG level only (no user-visible warnings).
+    Never raises.
     """
     global _CRUMB
 
-    if not _CRUMB:
-        _CRUMB = _get_crumb()
-        if not _CRUMB:
-            logger.warning("No crumb — fundamental metrics will be skipped")
-            return {}
+    def _rf(section: dict, key: str) -> Optional[float]:
+        v = section.get(key, {})
+        raw = v.get("raw") if isinstance(v, dict) else v
+        try:
+            return float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
 
-    def _attempt(crumb: str) -> dict:
+    def _quotesummary_attempt(crumb: str) -> dict:
         url = _QUOTE_SUMMARY.format(ticker=ticker)
         resp = _SESSION.get(
             url,
@@ -172,22 +247,13 @@ def _fetch_quote_fundamentals(ticker: str) -> dict:
         if resp.status_code != 200:
             logger.debug("quoteSummary HTTP %d for %s", resp.status_code, ticker)
             return {}
-        data = resp.json()
-        result = data.get("quoteSummary", {}).get("result") or []
+        data    = resp.json()
+        result  = data.get("quoteSummary", {}).get("result") or []
         if not result:
             return {}
-        modules = result[0]  # result[0] is a dict of module names → data
+        modules = result[0]
         ks = modules.get("defaultKeyStatistics", {})
         sd = modules.get("summaryDetail", {})
-
-        def _rf(section: dict, key: str):
-            v = section.get(key, {})
-            raw = v.get("raw") if isinstance(v, dict) else v
-            try:
-                return float(raw) if raw is not None else None
-            except (TypeError, ValueError):
-                return None
-
         return {
             "beta":               _rf(ks, "beta"),
             "pb_ratio":           _rf(ks, "priceToBook"),
@@ -198,19 +264,32 @@ def _fetch_quote_fundamentals(ticker: str) -> dict:
             "market_cap":         _rf(sd, "marketCap"),
         }
 
+    # ── 1. Try crumb-based quoteSummary ──────────────────────────────────────
     try:
-        result = _attempt(_CRUMB)
-        if result.pop("_unauthorized", False):
-            logger.debug("Crumb expired for %s — refreshing", ticker)
+        if not _CRUMB:
             _CRUMB = _get_crumb()
-            if not _CRUMB:
-                return {}
-            result = _attempt(_CRUMB)
-            result.pop("_unauthorized", None)
-        return result
+
+        if _CRUMB:
+            result = _quotesummary_attempt(_CRUMB)
+            if result.pop("_unauthorized", False):
+                logger.debug("Crumb expired for %s — refreshing", ticker)
+                _CRUMB = _get_crumb()
+                if _CRUMB:
+                    result = _quotesummary_attempt(_CRUMB)
+                    result.pop("_unauthorized", None)
+                else:
+                    result = {}
+            if result:
+                return result
+            # Empty dict → quoteSummary gave nothing; fall through to yfinance
+        else:
+            logger.debug("Crumb unavailable for %s — trying yfinance fallback", ticker)
+
     except Exception as exc:
-        logger.debug("Quote fundamentals failed for %s: %s", ticker, exc)
-        return {}
+        logger.debug("quoteSummary path failed for %s: %s", ticker, exc)
+
+    # ── 2. Fallback: yfinance .info ───────────────────────────────────────────
+    return _fetch_fundamentals_yfinance(ticker)
 
 
 # ── JSON → DataFrame ──────────────────────────────────────────────────────────
